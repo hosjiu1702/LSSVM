@@ -1,12 +1,13 @@
 import numpy as np
 from numpy import dot
+from sklearn.base import BaseEstimator, ClassifierMixin
 
-from utils.kernel import get_kernel
-from utils.import_export import dump_model, load_model
-from utils.conversion import numpy_json_encoder
+from .utils.kernel import get_kernel
+from .utils.import_export import dump_model, load_model
+from .utils.conversion import numpy_json_encoder
 
 
-class LSSVC():
+class LSSVC(BaseEstimator, ClassifierMixin):
     """A class that implements the Least Squares Support Vector Machine 
     for classification tasks.
 
@@ -59,17 +60,35 @@ class LSSVC():
     def __init__(self, gamma=1, kernel='rbf', **kernel_params): 
         # Hyperparameters
         self.gamma = gamma
-        self.kernel_ = kernel
+        self.kernel = kernel
         self.kernel_params = kernel_params
         
         # Model parameters
-        self.alpha = None
-        self.b = None
-        self.sv_x = None
-        self.sv_y = None
-        self.y_labels = None
+        # self.alpha = None
+        # self.b = None
+        # self.sv_x = None
+        # self.sv_y = None
+        # self.y_labels = None
         
         self.K = get_kernel(kernel, **kernel_params)
+
+    def get_params(self, deep=True):
+        return {
+                "gamma": self.gamma, 
+                "kernel": self.kernel,
+                # "kernel_params": self.kernel_params,
+                #"alpha": self.alpha,
+                #"b": self.b,
+                #"sv_x": self.sv_x,
+                #"sv_y": self.sv_y,
+                #"y_labels": self.y_labels,
+                #"K": self.K
+            }
+
+    def set_params(self, **parameters):
+        for parameter, value in parameters.items():
+            setattr(self, parameter, value)
+        return self
     
     def _optimize_parameters(self, X, y_values):
         """Help function that optimizes the dual variables through the 
@@ -125,6 +144,8 @@ class LSSVC():
                     ,+1,-1)[:,np.newaxis]
   
                 self.b[i], self.alpha[i] = self._optimize_parameters(X, y_values)
+
+        return self
         
     def predict(self, X):
         """Predicts the labels of data X given a trained model.
@@ -138,15 +159,13 @@ class LSSVC():
         X_reshaped = X.reshape(1,-1) if X.ndim==1 else X
         KxX = self.K(self.sv_x, X_reshaped)
         
-        if len(self.y_labels)==2: # binary classification
+        if len(self.y_labels) == 2:
             y_values = np.where(
                 (self.sv_y == self.y_labels[0]).all(axis=1),
                 -1,+1)[:,np.newaxis]
 
             y = np.sign(dot(np.multiply(self.alpha, y_values.flatten()), KxX) + self.b)
-            
             y_pred_labels = np.where(y==-1, self.y_labels[0], self.y_labels[1])
-        
         else: # multiclass classification, one-vs-all approach
             y = np.zeros((len(self.y_labels), len(X)))
             for i in range(len(self.y_labels)):
@@ -157,7 +176,7 @@ class LSSVC():
             
             predictions = np.argmax(y, axis=0)
             y_pred_labels = np.array([self.y_labels[i] for i in predictions])
-            
+
         return y_pred_labels
 
     def dump(self, filepath='model', only_hyperparams=False):
@@ -172,7 +191,7 @@ class LSSVC():
             'type': 'LSSVC',
             'hyperparameters': {
                 'gamma': self.gamma,
-                'kernel': self.kernel_,
+                'kernel': self.kernel,
                 'kernel_params': self.kernel_params
             }           
         }
